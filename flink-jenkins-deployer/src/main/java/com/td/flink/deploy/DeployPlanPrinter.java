@@ -19,9 +19,9 @@ public class DeployPlanPrinter {
         plan.put("dry_run", value(env, "DRY_RUN", "true"));
         plan.put("flink_home", value(env, "FLINK_HOME", "/opt/flink/flink"));
         plan.put("job_name", value(env, "JOB_NAME_TO_DEPLOY", ""));
-        plan.put("main_class", value(env, "MAIN_CLASS", ""));
-        plan.put("jar_path", value(env, "JAR_PATH", ""));
-        plan.put("app_config", value(env, "APP_CONFIG", ""));
+        plan.put("main_class", value(env, "MAIN_CLASS", "com.td.flink.job.KafkaBinlogToPaimonJob"));
+        plan.put("jar_path", value(env, "JAR_PATH", "/data/project/flink-transfer-paimon/flink-transfer-paimon-1.0-SNAPSHOT.jar"));
+        plan.put("app_config", value(env, "APP_CONFIG", "/data/project/flink-transfer-paimon/application.yaml"));
         plan.put("parallelism", value(env, "PARALLELISM", ""));
         plan.put("allow_non_restored_state", value(env, "ALLOW_NON_RESTORED_STATE", "false"));
         plan.put("restart_from", value(env, "RESTART_FROM", "checkpoint"));
