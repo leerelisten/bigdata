@@ -1,0 +1,86 @@
+pipeline {
+  agent any
+
+  options {
+    disableConcurrentBuilds()
+    timestamps()
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
+
+  parameters {
+    choice(name: 'BUILD_MODE', choices: ['package', 'skip'], description: '是否执行 Maven 打包')
+    booleanParam(name: 'DRY_RUN', defaultValue: true, description: '默认 true: 仅打印命令，不执行停启任务')
+    string(name: 'DEPLOY_ENV', defaultValue: 'prod', description: '环境标识，仅用于日志')
+    string(name: 'FLINK_HOME', defaultValue: '/opt/flink/flink', description: 'Flink 安装目录')
+    choice(name: 'STOP_MODE', choices: ['none', 'cancel', 'savepoint'], description: '提交前是否停止旧任务')
+    string(name: 'TARGET_JOB_ID', defaultValue: '', description: '要停止的旧任务 JobID，可空')
+    string(name: 'JOB_NAME_TO_DEPLOY', defaultValue: '', description: '按任务名查找 JobID（TARGET_JOB_ID 为空时生效）')
+    string(name: 'SAVEPOINT_DIR', defaultValue: '', description: 'STOP_MODE=savepoint 时保存点输出目录')
+    choice(name: 'RESTART_FROM', choices: ['checkpoint', 'savepoint', 'none'], description: '新任务状态恢复方式')
+    string(name: 'CHECKPOINT_PATH', defaultValue: '', description: 'RESTART_FROM=checkpoint 时填写元数据路径')
+    string(name: 'SAVEPOINT_PATH', defaultValue: '', description: 'RESTART_FROM=savepoint 时填写路径')
+    booleanParam(name: 'ALLOW_NON_RESTORED_STATE', defaultValue: false, description: '是否允许部分状态不恢复')
+    string(name: 'MAIN_CLASS', defaultValue: 'com.td.flink.job.KafkaBinlogToPaimonJob', description: 'Flink 程序主类')
+    string(name: 'JAR_PATH', defaultValue: 'target/flink-transfer-paimon-1.0-SNAPSHOT.jar', description: '提交的 jar 包路径')
+    string(name: 'APP_CONFIG', defaultValue: '/data/project/flink-transfer-paimon/application.yaml', description: '主程序配置文件参数')
+    string(name: 'PARALLELISM', defaultValue: '', description: '并行度，可空')
+    string(name: 'EXTRA_ARGS', defaultValue: '', description: '补充参数，如 --env prod')
+  }
+
+  environment {
+    JAVA_HOME = '/usr/lib/jvm/java-17-openjdk-17.0.17.0.10-1.tl3.x86_64'
+    PATH = "${JAVA_HOME}/bin:${env.PATH}"
+  }
+
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Build Deployer Helper') {
+      when {
+        expression { fileExists('flink-streaming/flink-jenkins-deployer/pom.xml') }
+      }
+      steps {
+        dir('flink-streaming/flink-jenkins-deployer') {
+          sh 'mvn -U -DskipTests clean package'
+        }
+      }
+    }
+
+    stage('Print Deploy Plan') {
+      steps {
+        dir('flink-streaming/flink-jenkins-deployer') {
+          sh '''
+            export BUILD_MODE="${BUILD_MODE}"
+            export DEPLOY_ENV="${DEPLOY_ENV}"
+            export DRY_RUN="${DRY_RUN}"
+            export FLINK_HOME="${FLINK_HOME}"
+            export JOB_NAME_TO_DEPLOY="${JOB_NAME_TO_DEPLOY}"
+            export MAIN_CLASS="${MAIN_CLASS}"
+            export JAR_PATH="${JAR_PATH}"
+            export APP_CONFIG="${APP_CONFIG}"
+            export PARALLELISM="${PARALLELISM}"
+            export ALLOW_NON_RESTORED_STATE="${ALLOW_NON_RESTORED_STATE}"
+            export RESTART_FROM="${RESTART_FROM}"
+            export CHECKPOINT_PATH="${CHECKPOINT_PATH}"
+            export SAVEPOINT_PATH="${SAVEPOINT_PATH}"
+            export EXTRA_ARGS="${EXTRA_ARGS}"
+            java -jar target/flink-jenkins-deployer-1.0-SNAPSHOT.jar
+          '''
+        }
+      }
+    }
+
+    stage('Deploy Script') {
+      steps {
+        dir('flink-streaming/flink-jenkins-deployer') {
+          sh 'chmod +x scripts/flink_deploy.sh'
+          sh './scripts/flink_deploy.sh'
+        }
+      }
+    }
+  }
+}
